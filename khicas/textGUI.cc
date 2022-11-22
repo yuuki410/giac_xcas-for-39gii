@@ -19,11 +19,9 @@
 textArea *edptr = 0;
 void displaylogo();
 extern giac::context *contextptr;
-#define C24 12 // 24 on 90
-#define C22 12
-#define C19 12
-#define C154 48
-#define C6 6 // 6
+#define C24 16 
+#define C19 16 // 17?
+#define C154 96
 
 bool is_alphanum(char c)
 {
@@ -69,7 +67,7 @@ void clearLine(int x, int y, bool minimini)
 {
   // clear text line. x and y are text cursor coordinates
   // this is meant to achieve the same effect as using PrintXY with a line full of spaces (except it doesn't waste strings).
-  int X = (minimini ? 4 : 6) * (x - 1);
+  int X = (minimini ? 6 : 8) * (x - 1);
   int width = LCD_WIDTH_PX - X;
   giac::drawRectangle(X, (y - 1) * C24, width, C24, COLOR_WHITE);
 }
@@ -354,11 +352,28 @@ int check_parse(const ustl::vector<textElement> &v, int python)
   return lineerr;
 }
 
-void fix_newlines(textArea *edptr)
-{
-  edptr->elements[0].newLine = 0;
-  for (size_t i = 1; i < edptr->elements.size(); ++i)
-    edptr->elements[i].newLine = 1;
+void fix_newlines(textArea * edptr){
+  edptr->elements[0].newLine=0;
+  for (size_t i=1;i<edptr->elements.size();++i)
+    edptr->elements[i].newLine=1;
+  for (size_t i=0;i<edptr->elements.size();++i){
+    string S=edptr->elements[i].s;
+    if (S.size()>96)
+      edptr->minimini=1;
+    const int cut=160;
+    if (edptr->longlinescut && S.size()>cut){
+      // string too long, cut it, set font to minimini
+      int j;
+      for (j=(4*cut)/5;j>=(2*cut)/5;--j){
+	if (!is_alphanum(S[j]))
+	  break;
+      }
+      textElement elem; elem.newLine=1; elem.s=S.substr(j,S.size()-j);
+      edptr->elements[i].s=S.substr(0,j);
+      edptr->elements.insert(edptr->elements.begin()+i+1,elem);
+    }
+  }
+  
 }
 
 int end_do_then(const ustl::string &s)
@@ -735,18 +750,18 @@ void print(int &X, int &Y, const char *buf, int color, bool revert, bool fake, b
       {
         if (color == giac::_BLUE)
         {                                                                               // 1 (command)
-          giac::draw_line(X, Y + 12, X + 6 * strlen(buf), Y + 12, COLOR_BLACK, 0xAAAA); //!!!!!!!!! 7
+          giac::draw_line(X, Y + 13, X + 8 * strlen(buf), Y + 13, COLOR_BLACK, 0xAAAA); //!!!!!!!!! 7
           // giac::draw_line(X,Y+7,X+6,Y+7,COLOR_BLACK);
           // giac::draw_line(X+6*strlen(buf)-6,Y+7,X+6*strlen(buf),Y+7,COLOR_BLACK);
         }
         if (color == giac::_RED)
         {                                                                       // 2 (keyword)
-          giac::draw_line(X, Y + 12, X + 6 * strlen(buf), Y + 12, COLOR_BLACK); //!!!!!!!!! 7
+          giac::draw_line(X, Y + 13, X + 8 * strlen(buf), Y + 13, COLOR_BLACK); //!!!!!!!!! 7
         }
       }
     }
   }
-  X += ((minimini || color == giac::_GREEN || color == giac::_YELLOW) ? 4 : 6) * strlen(buf);
+  X += ((minimini || color == giac::_GREEN || color == giac::_YELLOW) ? 6 : 8) * strlen(buf);
 }
 
 void match_print(char *singleword, int delta, int X, int Y, bool match, bool minimini)
@@ -990,6 +1005,7 @@ bool change_mode(textArea *text, int flag)
 
 static void textarea_disp(textArea *text, int &isFirstDraw, int &totalTextY, int &scroll, int &textY, bool global_minimini)
 {
+  *logptr(contextptr) << text->lineHeight << '\n';
   Cursor_SetFlashOff();
   bool editable = text->editable;
   int showtitle = !editable && (text->title != NULL);
@@ -1087,7 +1103,8 @@ static void textarea_disp(textArea *text, int &isFirstDraw, int &totalTextY, int
     {
       textY = textY + text->lineHeight + v[cur].lineSpacing;
       if (minimini && cur)
-        textY -= 1;
+        textY -= 4;
+      *logptr(contextptr) << cur << " " << minimini << " " << textY << '\n';
     }
     if (editable)
     {
@@ -1847,7 +1864,7 @@ int doTextArea(textArea *text)
         smallmenu.numitems = 12;
         MenuItem smallmenuitems[smallmenu.numitems];
         smallmenu.items = smallmenuitems;
-        smallmenu.height = 9; //!!!!!
+        smallmenu.height = 8; //!!!!!
         smallmenu.scrollbar = 0;
         // smallmenu.title = "KhiCAS";
         smallmenuitems[0].text = (char *)(giac::lang ? "Tester syntaxe" : "Check syntax");
@@ -1957,10 +1974,9 @@ int doTextArea(textArea *text)
             warn_python(text->python, false);
             textarea_disp(text, isFirstDraw, totalTextY, scroll, textY, text->minimini);
             // draw_menu(1);
-          } /*
-           if (sres==9)
-             text->minimini=!text->minimini;*/
-            //!!!!!!
+          } 
+          if (sres==9)
+            text->minimini=!text->minimini;
           if (sres == 10)
           {
             int res = check_leave(text);

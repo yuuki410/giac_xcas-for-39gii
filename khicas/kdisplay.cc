@@ -17,10 +17,17 @@
  */
 
 #include "kdisplay.h"
+#include "console.h"
+#include "menuGUI.h"
 extern giac::context *contextptr;
+extern int khicas_1bpp;
 
 using namespace std;
 using namespace giac;
+
+void os_draw_string(int x,int y,int c,int bg,const char * s){
+  PrintMini(2*x,2*y,(const unsigned char *)s,c);
+}
 
 #ifndef NO_NAMESPACE_XCAS
 namespace xcas
@@ -387,9 +394,8 @@ namespace xcas
 
   int text_width(int fontsize, const char *s)
   {
-    /*
     if (fontsize >= 8)
-      return strlen(s) * 8; //!!!!*/
+      return strlen(s) * 8; 
     return strlen(s) * 7;   //!!!!
   }
 
@@ -1721,7 +1727,7 @@ namespace xcas
   {
     _x = x_;
     _y = y_;
-    attr = attributs(8, COLOR_WHITE, COLOR_BLACK);
+    attr = attributs(12, COLOR_WHITE, COLOR_BLACK);
     if (taille(g, max_prettyprint_equation) < max_prettyprint_equation)
       data = Equation_compute_size(g, attr, LCD_WIDTH_PX, contextptr);
     else
@@ -1816,8 +1822,10 @@ namespace xcas
     return d;
   }
 
-  Graph2d::Graph2d(const giac::gen &g_) : window_xmin(gnuplot_xmin), window_xmax(gnuplot_xmax), window_ymin(gnuplot_ymin), window_ymax(gnuplot_ymax), g(g_), display_mode(0x45), show_axes(1), show_names(1), labelsize(8)
+  Graph2d::Graph2d(const giac::gen &g_) : window_xmin(gnuplot_xmin), window_xmax(gnuplot_xmax), window_ymin(gnuplot_ymin), window_ymax(gnuplot_ymax), display_mode(0x45), show_axes(1), show_names(1), labelsize(8)
   {
+    g=g_;
+    tracemode=0; tracemode_n=0; tracemode_i=0;
     update();
     autoscale();
   }
@@ -1953,6 +1961,467 @@ namespace xcas
     }
     // cerr << "Invalid drawing data" << endl;
     return false;
+  }
+
+  std::string printn(const gen & g,int n){
+    if (g.type!=_DOUBLE_)
+      return g.print();
+    return giac::print_DOUBLE_(g._DOUBLE_val,n);
+  }
+  void Graph2d::tracemode_set(int operation){
+    if (plot_instructions.empty())
+      plot_instructions=gen2vecteur(g);
+    if (is_zero(plot_instructions.back())) // workaround for 0 at end in geometry (?)
+      plot_instructions.pop_back();
+    gen sol(undef);
+    if (operation==1 || operation==8){
+      double d=tracemode_mark;
+      if (!inputdouble(lang==1?"Valeur du parametre?":"Parameter value",d))
+	return;
+      if (operation==8)
+	tracemode_mark=d;
+      sol=d;
+    }
+    // handle curves with more than one connected component
+    vecteur tracemode_v;
+    for (int i=0;i<plot_instructions.size();++i){
+      gen g=plot_instructions[i];
+      if (g.type==_VECT && !g._VECTptr->empty() && g._VECTptr->front().is_symb_of_sommet(at_curve)){
+	vecteur & v=*g._VECTptr;
+	for (int j=0;j<v.size();++j)
+	  tracemode_v.push_back(v[j]);
+      }
+      else
+	tracemode_v.push_back(g);
+    }
+    gen G;
+    if (tracemode_n<0)
+      tracemode_n=tracemode_v.size()-1;
+    bool retry=tracemode_n>0;
+    for (;tracemode_n<tracemode_v.size();++tracemode_n){
+      G=tracemode_v[tracemode_n];
+      if (G.is_symb_of_sommet(at_pnt))
+	break;
+    }
+    if (tracemode_n>=tracemode_v.size()){
+      // retry
+      if (retry){
+	for (tracemode_n=0;tracemode_n<tracemode_v.size();++tracemode_n){
+	  G=tracemode_v[tracemode_n];
+	  if (G.is_symb_of_sommet(at_pnt))
+	    break;
+	}
+      }
+      if (tracemode_n>=tracemode_v.size()){
+	tracemode=false;
+	return;
+      }
+    }
+    int p=python_compat(contextptr);
+    python_compat(0,contextptr);
+    gen G_orig(G);
+    G=remove_at_pnt(G);
+    tracemode_disp.clear();
+    string curve_infos1,curve_infos2;
+    gen parameq,x,y,t,tmin,tmax,tstep;
+    // extract position at tracemode_i
+    if (G.is_symb_of_sommet(at_curve)){
+      gen c=G._SYMBptr->feuille[0],x1,x2,y1,y2;
+      parameq=c[0];
+      t=c[1];
+#if 0
+      if (t==cache_t && p==cache_parameq){
+        x=cache_x; x1=cache_x1; x2=cache_x2;
+        y=cache_y; y1=cache_y1; y2=cache_y2;
+      }
+      else
+#endif
+        {
+        // simple expand for i*ln(x)
+        bool b=do_lnabs(contextptr);
+        do_lnabs(false,contextptr);
+        reim(parameq,x,y,contextptr);
+        do_lnabs(b,contextptr);
+        x1=derive(x,t,contextptr);
+        x2=derive(x1,t,contextptr);
+        y1=derive(y,t,contextptr);
+        y2=derive(y1,t,contextptr);
+#if 0
+        cache_t=t; cache_parameq=parameq;
+        cache_x=x; cache_y=y;
+        cache_x1=x1; cache_y1=y1;
+        cache_x2=x2; cache_y2=y2;
+#endif
+        sto(x,gen("X0",contextptr),contextptr);
+        sto(x1,gen("X1",contextptr),contextptr);
+        sto(x2,gen("X2",contextptr),contextptr);
+        sto(y,gen("Y0",contextptr),contextptr);
+        sto(y1,gen("Y1",contextptr),contextptr);
+        sto(y2,gen("Y2",contextptr),contextptr);
+      }
+      tmin=c[2];
+      tmax=c[3];
+      tmin=evalf_double(tmin,1,contextptr);
+      tmax=evalf_double(tmax,1,contextptr);
+      if (tmin._DOUBLE_val>tracemode_mark)
+	tracemode_mark=tmin._DOUBLE_val;
+      if (tmax._DOUBLE_val<tracemode_mark)
+	tracemode_mark=tmax._DOUBLE_val;
+      G=G._SYMBptr->feuille[1];
+      if (G.type==_VECT){
+	vecteur &Gv=*G._VECTptr;
+	tstep=(tmax-tmin)/(Gv.size()-1);
+      }
+      double eps=1e-6; // epsilon(contextptr)
+      double curt=(tmin+tracemode_i*tstep)._DOUBLE_val;
+      if (abs(curt-tracemode_mark)<tstep._DOUBLE_val)
+	curt=tracemode_mark;
+      if (operation==-1){
+	gen A,B,C,R; // detect ellipse/hyperbola
+	if ( 0 &&
+	    ( x!=t && c.type==_VECT && c._VECTptr->size()>7
+	      //&& centre_rayon(G_orig,C,R,false,contextptr,true)
+	      )
+	    ||
+	    is_quadratic_wrt(parameq,t,A,B,C,contextptr)
+	    ){
+	  if (C.type!=_VECT){ // x+i*y=A*t^2+B*t+C
+	    curve_infos1="Parabola";
+	    curve_infos2=_equation(G_orig,contextptr).print(contextptr);
+	  }
+	  else {
+	    vecteur V(*C._VECTptr);
+	    curve_infos1=V[0].print(contextptr);
+	    curve_infos1=curve_infos1.substr(1,curve_infos1.size()-2);
+	    curve_infos1+=" O=";
+	    curve_infos1+=V[1].print(contextptr);
+	    curve_infos1+=", F=";
+	    curve_infos1+=V[2].print(contextptr);
+	    // curve_infos1=change_subtype(C,_SEQ__VECT).print(contextptr);
+	    curve_infos2=change_subtype(R,_SEQ__VECT).print(contextptr);
+	  }
+	}
+	else {
+	  if (x==t) curve_infos1="Function "+y.print(contextptr); else curve_infos1="Parametric "+x.print(contextptr)+","+y.print(contextptr);
+	  curve_infos2 = t.print(contextptr)+"="+tmin.print(contextptr)+".."+tmax.print(contextptr)+',';
+	  curve_infos2 += (x==t?"xstep=":"tstep=")+tstep.print(contextptr);
+	}
+      }
+      if (operation==1)
+	curt=sol._DOUBLE_val;
+      if (operation==7)
+	sol=tracemode_mark=curt;
+      if (operation==2){ // root near curt
+	sol=newton(y,t,curt,NEWTON_DEFAULT_ITERATION,eps,1e-12,true,tmin._DOUBLE_val,tmax._DOUBLE_val,1,0,1,contextptr);
+	if (sol.type==_DOUBLE_){
+	  confirm(lang==1?"Racine en":"Root at",sol.print(contextptr).c_str());
+	  sto(sol,gen("Zero",contextptr),contextptr);
+	}
+      }
+      if (operation==4){ // horizontal tangent near curt
+	sol=newton(y1,t,curt,NEWTON_DEFAULT_ITERATION,eps,1e-12,true,tmin._DOUBLE_val,tmax._DOUBLE_val,1,0,1,contextptr);
+	if (sol.type==_DOUBLE_){
+	  confirm(lang==1?"y'=0, extremum/pt singulier en":"y'=0, extremum/singular pt at",sol.print(contextptr).c_str());
+	  sto(sol,gen("Extremum",contextptr),contextptr);
+	}
+      }
+      if (operation==5){ // vertical tangent near curt
+	if (x1==1)
+	  do_confirm(lang==1?"Outil pour courbes parametriques!":"Tool for parametric curves!");
+	else {
+	  sol=newton(x1,t,curt,NEWTON_DEFAULT_ITERATION,eps,1e-12,true,tmin._DOUBLE_val,tmax._DOUBLE_val,1,0,1,contextptr);
+	  if (sol.type==_DOUBLE_){
+	    confirm("x'=0, vertical or singular",sol.print(contextptr).c_str());
+	    sto(sol,gen("Vertical",contextptr),contextptr);
+	  }
+	}
+      }
+      if (operation==6){ // inflexion
+	sol=newton(x1*y2-x2*y1,t,curt,NEWTON_DEFAULT_ITERATION,eps,1e-12,true,tmin._DOUBLE_val,tmax._DOUBLE_val,1,0,1,contextptr);
+	if (sol.type==_DOUBLE_){
+	  confirm("x'*y''-x''*y'=0",sol.print(contextptr).c_str());
+	  sto(sol,gen("Inflexion",contextptr),contextptr);
+	}
+      }
+#if 1
+      if (operation==3 && x==t){ // intersect this curve with other curves
+	for (int j=0;j<tracemode_v.size();++j){
+	  if (j==tracemode_n)
+	    continue;
+	  gen H=remove_at_pnt(tracemode_v[j]),Hx,Hy;
+	  if (H.is_symb_of_sommet(at_curve)){
+	    H=H._SYMBptr->feuille[0];
+	    H=H[0];
+	    bool b=do_lnabs(contextptr);
+	    do_lnabs(false,contextptr);
+	    reim(H,Hx,Hy,contextptr);
+	    do_lnabs(b,contextptr);
+	    if (Hx==x){
+	      //double curt=(tmin+tracemode_i*tstep)._DOUBLE_val,eps=1e-6;
+	      gen cursol=newton(Hy-y,t,curt,NEWTON_DEFAULT_ITERATION,eps,1e-12,true,tmin._DOUBLE_val,tmax._DOUBLE_val,1,0,1,contextptr);
+	      if (cursol.type==_DOUBLE_ && 
+		  (is_undef(sol) || is_greater(sol-curt,cursol-curt,contextptr)) )
+		sol=cursol;
+	    }
+	  }
+	}
+	if (sol.type==_DOUBLE_){
+	  sto(sol,gen("Intersect",contextptr),contextptr);
+	  tracemode_mark=sol._DOUBLE_val;
+	}
+      } // end intersect
+#endif
+      gen M(put_attributs(_point(subst(parameq,t,tracemode_mark,false,contextptr),contextptr),vecteur(1,_POINT_WIDTH_4 | _BLUE),contextptr));
+      tracemode_disp.push_back(M);      
+      gen f;
+      if (operation==9)
+	f=y*derive(x,t,contextptr);
+      if (operation==10){
+	f=sqrt(pow(x1,2,contextptr)+pow(y1,2,contextptr),contextptr);
+      }
+      if (operation==9 || operation==10){
+	double a=tracemode_mark,b=curt;
+	if (a>b)
+	  swapdouble(a,b);
+	gen res=symbolic( (operation==9 && x==t?at_plotarea:at_integrate),
+			  makesequence(f,symb_equal(t,symb_interval(a,b))));
+	if (operation==9)
+	  tracemode_disp.push_back(giac::eval(res,1,contextptr));
+	string ss=res.print(contextptr);
+	if (!tegral(f,t,a,b,1e-6,1<<10,res,false,contextptr))
+	  confirm("Numerical Integration Error",ss.c_str());
+	else {
+	  confirm(ss.c_str(),res.print(contextptr).c_str());
+	  sto(res,gen((operation==9?"Area":"Arclength"),contextptr),contextptr);	  
+	}
+      }
+      if (operation>=1 && operation<=8 && sol.type==_DOUBLE_ && !is_zero(tstep)){
+	tracemode_i=(sol._DOUBLE_val-tmin._DOUBLE_val)/tstep._DOUBLE_val;
+	G=subst(parameq,t,sol._DOUBLE_val,false,contextptr);
+      }
+    }
+    if (G.is_symb_of_sommet(at_cercle)){
+      if (operation==-1){
+	gen c,r;
+	centre_rayon(G,c,r,true,contextptr);
+	curve_infos1="Circle radius "+r.print(contextptr);
+	curve_infos2="Center "+_coordonnees(c,contextptr).print(contextptr);
+      }
+      G=G._SYMBptr->feuille[0];
+    }
+    if (G.type==_VECT){
+      vecteur & v=*G._VECTptr;
+      if (operation==-1 && curve_infos1.size()==0){
+	if (v.size()==2)
+	  curve_infos1=_equation(G_orig,contextptr).print(contextptr);
+	else if (v.size()==4)
+	  curve_infos1="Triangle";
+	else curve_infos1="Polygon";
+	curve_infos2=G.print(contextptr);
+      }
+      int i=std::floor(tracemode_i);
+      double id=tracemode_i-i;
+      if (i>=int(v.size()-1)){
+	tracemode_i=i=v.size()-1;
+	id=0;
+      }
+      if (i<0){
+	tracemode_i=i=0;
+	id=0;
+      }
+      G=v[i];
+      if (!is_zero(tstep) && id>0)
+	G=v[i]+id*tstep*(v[i+1]-v[i]);
+    }
+    G=evalf(G,1,contextptr);
+    gen Gx,Gy; reim(G,Gx,Gy,contextptr);
+    Gx=evalf_double(Gx,1,contextptr);
+    Gy=evalf_double(Gy,1,contextptr);
+    if (operation==-1){
+      if (curve_infos1.size()==0)
+	curve_infos1="Position "+Gx.print(contextptr)+","+Gy.print(contextptr);
+      if (G_orig.is_symb_of_sommet(at_pnt)){
+	gen f=G_orig._SYMBptr->feuille;
+	if (f.type==_VECT && f._VECTptr->size()==3){
+	  f=f._VECTptr->back();
+	  curve_infos1 = f.print(contextptr)+": "+curve_infos1;
+	}
+      }
+      if (confirm(curve_infos1.c_str(),curve_infos2.c_str())==KEY_CTRL_F1 && tstep!=0){
+	// statuslinemsg("EXIT: quit, up/down: move");
+	double t0=tmin._DOUBLE_val,ts,tc=t0;
+	ts=find_tick(tstep._DOUBLE_val*5);
+	t0=int(t0/ts)*ts;
+	int ndisp=10,N=6,dy=5;
+	for (;;){
+	  // table of values
+	  drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,_WHITE);
+	  if (t==x){
+	    os_draw_string(0,6,_BLACK,_WHITE,"x");
+	    os_draw_string(64,6,_BLACK,_WHITE,y.print().c_str());
+	  }
+	  else {
+	    os_draw_string(0,6,_BLACK,_WHITE,"t");
+	    os_draw_string(42,6,_BLACK,_WHITE,"x");
+	    os_draw_string(84,6,_BLACK,_WHITE,"y");
+	  }
+	  vecteur V;
+	  for (int i=1;i<=ndisp;++i){
+	    double tcur=tc+(i-1)*ts;
+	    vecteur L(1,tcur);
+	    os_draw_string(0,dy+i*6,_BLACK,_WHITE,printn(tcur,N).c_str());
+	    if (t==x){
+	      gen cur=subst(y,t,tcur,false,contextptr);
+	      L.push_back(cur);
+	      os_draw_string(64,dy+i*6,_BLACK,_WHITE,printn(cur,N).c_str());
+	    }
+	    else {
+	      gen cur=subst(x,t,tcur,false,contextptr);
+	      L.push_back(cur);
+	      os_draw_string(42,dy+i*6,_BLACK,_WHITE,printn(cur,N).c_str());
+	      cur=subst(y,t,tcur,false,contextptr);
+	      L.push_back(cur);
+	      os_draw_string(84,dy+i*6,_BLACK,_WHITE,printn(cur,N).c_str());	      
+	    }
+	    V.push_back(L);
+	  }
+	  unsigned int key;GetKey(&key);
+	  if (key==KEY_CTRL_EXIT || key==KEY_CTRL_EXE)
+	    break;
+	  if (key==KEY_CTRL_UP)
+	    tc -= (ndisp/2)*ts;
+	  if (key==KEY_CTRL_DOWN)
+	    tc += (ndisp/2)*ts;
+	  if (key==KEY_CHAR_PLUS)
+	    ts /= 2;
+	  if (key==KEY_CHAR_MINUS)
+	    ts *= 2;
+	  if (key==KEY_CTRL_DEL && inputdouble("step",ts))
+	    ts=fabs(ts);
+	  if (key==KEY_CTRL_LEFT)
+	    inputdouble("min",tc);
+	  if (key==KEY_CTRL_CLIP)
+	    copy_clipboard(gen(V).print(contextptr),true);
+	}
+      }
+      // confirm(curve_infos1.c_str(),curve_infos2.c_str());
+    }
+    tracemode_add="";
+    if (Gx.type==_DOUBLE_ && Gy.type==_DOUBLE_){
+      tracemode_add += "x="+print_DOUBLE_(Gx._DOUBLE_val,3)+",y="+print_DOUBLE_(Gy._DOUBLE_val,3);
+      if (tstep!=0){
+	gen curt=tmin+tracemode_i*tstep;
+	if (curt.type==_DOUBLE_){
+	  if (t!=x)
+	    tracemode_add += ", t="+print_DOUBLE_(curt._DOUBLE_val,3);
+	  if (tracemode & 2){
+	    gen G1=derive(parameq,t,contextptr);
+	    gen G1t=subst(G1,t,curt,false,contextptr);
+	    gen G1x,G1y; reim(G1t,G1x,G1y,contextptr);
+	    gen m=evalf_double(G1y/G1x,1,contextptr);
+	    if (m.type==_DOUBLE_)
+	      tracemode_add += ", m="+print_DOUBLE_(m._DOUBLE_val,3);
+	    gen T(_vector(makesequence(_point(G,contextptr),_point(G+G1t,contextptr)),contextptr));
+	    tracemode_disp.push_back(T);
+	    gen G2(derive(G1,t,contextptr));
+	    gen G2t=subst(G2,t,curt,false,contextptr);
+	    gen G2x,G2y; reim(G2t,G2x,G2y,contextptr);
+	    gen det(G1x*G2y-G2x*G1y);
+	    gen Tn=sqrt(G1x*G1x+G1y*G1y,contextptr);
+	    gen R=evalf_double(Tn*Tn*Tn/det,1,contextptr);
+	    gen centre=G+R*(-G1y+cst_i*G1x)/Tn;
+	    if (tracemode & 4){
+	      gen N(_vector(makesequence(_point(G,contextptr),_point(centre,contextptr)),contextptr));
+	      tracemode_disp.push_back(N);
+	    }
+	    if (tracemode & 8){
+	      if (R.type==_DOUBLE_)
+		tracemode_add += ", R="+print_DOUBLE_(R._DOUBLE_val,3);
+	      tracemode_disp.push_back(_cercle(makesequence(centre,R),contextptr));
+	    }
+	  }
+	}
+      }
+    }
+    double x_scale=LCD_WIDTH_PX/(window_xmax-window_xmin);
+    double y_scale=LCD_HEIGHT_PX/(window_ymax-window_ymin);
+    double i,j;
+    findij(G,x_scale,y_scale,i,j,contextptr);
+    current_i=int(i+.5);
+    current_j=int(j+.5);
+    python_compat(p,contextptr);
+  }
+
+  void Graph2d::invert_tracemode(){
+    if (!tracemode)
+      init_tracemode();
+    else
+      tracemode=0;
+  }
+
+  void Graph2d::init_tracemode(){
+    tracemode_mark=0.0;
+    double w=LCD_WIDTH_PX;
+    double h=LCD_HEIGHT_PX-STATUS_AREA_PX;
+    double window_w=window_xmax-window_xmin,window_h=window_ymax-window_ymin;
+    double r=h/w*window_w/window_h;
+    tracemode=(r>0.7 && r<1.4)?7:3;
+    tracemode_set();
+  }
+
+int select_item(const char ** ptr,const char * title,bool askfor1){
+  int nitems=0;
+  for (const char ** p=ptr;*p;++p)
+    ++nitems;
+  if (nitems==0 || nitems>=256)
+    return -1;
+  if (!askfor1 && nitems==1)
+    return 0;
+  MenuItem smallmenuitems[nitems];
+  for (int i=0;i<nitems;++i){
+    smallmenuitems[i].text=(char *) ptr[i];
+  }
+  Menu smallmenu;
+  smallmenu.numitems=nitems; 
+  smallmenu.items=smallmenuitems;
+  smallmenu.height=nitems<8?nitems+1:8;
+  smallmenu.scrollbar=1;
+  smallmenu.scrollout=1;
+  smallmenu.title = (char*) title;
+  //MsgBoxPush(5);
+  int sres = doMenu(&smallmenu);
+  //MsgBoxPop();
+  if (sres!=MENU_RETURN_SELECTION && sres!=KEY_CTRL_EXE)
+    return -1;
+  return smallmenu.selection-1;
+}
+
+  void Graph2d::curve_infos(){
+    if (!tracemode)
+      init_tracemode();
+    const char *
+      tab[]={
+	     lang==1?"Infos objet (F2)":"Object infos (F2)",  // 0
+	     lang==1?"Quitte mode etude (xtt)":"Quit study mode (xtt)",
+	     lang==1?"Entrer t ou x":"Set t or x", // 1
+	     lang==1?"y=0, racine":"y=0, root",
+	     "Intersection", // 3
+	     "y'=0, extremum",
+	     lang==1?"x'=0 (parametriques)":"x'=0 (parametric)", // 5
+	     "Inflexion",
+	     lang==1?"Marquer la position":"Mark position",
+	     lang==1?"Entrer t ou x, marquer":"Set t or x, mark", // 8
+	     lang==1?"Aire":"Area",
+	     lang==1?"Longueur d'arc":"Arc length", // 10
+	     0};
+    const int s=sizeof(tab)/sizeof(char *);
+    int choix=select_item(tab,lang==1?"Etude courbes":"Curve study",true);
+    if (choix<0 || choix>s)
+      return;
+    if (choix==1)
+      tracemode=0;
+    else 
+      tracemode_set(choix-1);
   }
 
   inline void swapint(int &i0, int &i1)
@@ -2529,6 +2998,17 @@ namespace xcas
   }
 #endif
 
+  void Graph2d::draw_decorations(){
+    if (!tracemode) return;
+    PrintMini(0,STATUS_AREA_PX,(const unsigned char *)tracemode_add.c_str(),COLOR_BLACK);
+    if (!tracemode_disp.empty())
+      fltk_draw(*this,tracemode_disp,x_scale,y_scale,0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX);
+    int taille=5;
+    int j=current_j+STATUS_AREA_PX;
+    fl_line(current_i-taille,j,current_i+taille,j,_BLACK);
+    fl_line(current_i,j-taille,current_i,j+taille,_BLACK);
+  }
+
   // return a vector of values with simple decimal representation
   // between xmin/xmax or including xmin/xmax (if bounds is true)
   vecteur ticks(double xmin, double xmax, bool bounds)
@@ -2569,6 +3049,9 @@ namespace xcas
     clip_ymin = STATUS_AREA_PX;
     int horizontal_pixels = LCD_WIDTH_PX, vertical_pixels = LCD_HEIGHT_PX - STATUS_AREA_PX, deltax = 0, deltay = STATUS_AREA_PX, clip_x = 0, clip_y = 0, clip_w = horizontal_pixels, clip_h = vertical_pixels;
     Bdisp_AllClr_VRAM();
+    int green=khicas_1bpp?0:COLOR_GREEN;
+    int red=khicas_1bpp?0:COLOR_RED;
+    int cyan=khicas_1bpp?0:COLOR_CYAN;
     // Draw axis
     double I0, J0;
     findij(zero, x_scale, y_scale, I0, J0, contextptr); // origin
@@ -2578,8 +3061,8 @@ namespace xcas
       vecteur aff;
       int affs;
       char ch[256];
-      check_fl_line(deltax, deltay + j_0, deltax + horizontal_pixels, deltay + j_0, clip_x, clip_y, clip_w, clip_h, 0, 0, COLOR_GREEN);
-      check_fl_line(deltax + i_0, deltay + j_0, deltax + i_0 + int(x_scale), deltay + j_0, clip_x, clip_y, clip_w, clip_h, 0, 0, COLOR_CYAN);
+      check_fl_line(deltax, deltay + j_0, deltax + horizontal_pixels, deltay + j_0, clip_x, clip_y, clip_w, clip_h, 0, 0, green);
+      check_fl_line(deltax + i_0, deltay + j_0, deltax + i_0 + int(x_scale), deltay + j_0, clip_x, clip_y, clip_w, clip_h, 0, 0, cyan);
       aff = ticks(window_xmin, window_xmax, true);
       affs = aff.size();
       for (int i = 0; i < affs; ++i)
@@ -2589,17 +3072,17 @@ namespace xcas
                               // sprintf(ch,"%f",d);
         int delta = int(horizontal_pixels * (d - window_xmin) / (window_xmax - window_xmin));
         int taille = strlen(ch) * 9;
-        fl_line(delta, deltay + j_0, delta, deltay + j_0 - 2, COLOR_GREEN);
+        fl_line(delta, deltay + j_0, delta, deltay + j_0 - 2, green);
       }
-      // check_fl_draw(labelsize,"x",deltax+horizontal_pixels-40,deltay+j_0-4,clip_x,clip_y,clip_w,clip_h,0,0,COLOR_GREEN);
+      // check_fl_draw(labelsize,"x",deltax+horizontal_pixels-40,deltay+j_0-4,clip_x,clip_y,clip_w,clip_h,0,0,green);
     }
     if (show_axes && (window_xmax >= 0) && (window_xmin <= 0))
     { // Y-axis
       vecteur aff;
       int affs;
       char ch[256];
-      check_fl_line(deltax + i_0, deltay, deltax + i_0, deltay + vertical_pixels, clip_x, clip_y, clip_w, clip_h, 0, 0, COLOR_RED);
-      check_fl_line(deltax + i_0, deltay + j_0, deltax + i_0, deltay + j_0 - int(y_scale), clip_x, clip_y, clip_w, clip_h, 0, 0, COLOR_CYAN);
+      check_fl_line(deltax + i_0, deltay, deltax + i_0, deltay + vertical_pixels, clip_x, clip_y, clip_w, clip_h, 0, 0, red);
+      check_fl_line(deltax + i_0, deltay + j_0, deltax + i_0, deltay + j_0 - int(y_scale), clip_x, clip_y, clip_w, clip_h, 0, 0, cyan);
       aff = ticks(window_ymin, window_ymax, true);
       affs = aff.size();
       int taille = 3;
@@ -2611,10 +3094,10 @@ namespace xcas
         int delta = int(vertical_pixels * (window_ymax - d) / (window_ymax - window_ymin));
         if (delta >= taille && delta <= vertical_pixels - taille)
         {
-          fl_line(deltax + i_0, STATUS_AREA_PX + delta, deltax + i_0 + 2, STATUS_AREA_PX + delta, COLOR_RED);
+          fl_line(deltax + i_0, STATUS_AREA_PX + delta, deltax + i_0 + 2, STATUS_AREA_PX + delta, red);
         }
       }
-      // check_fl_draw(labelsize,"y",deltax+i_0+2,deltay+labelsize,clip_x,clip_y,clip_w,clip_h,0,0,COLOR_RED);
+      // check_fl_draw(labelsize,"y",deltax+i_0+2,deltay+labelsize,clip_x,clip_y,clip_w,clip_h,0,0,red);
     }
 #if 0 // if ticks are enabled, don't forget to set freeze to false
     // Ticks
@@ -2650,10 +3133,10 @@ namespace xcas
           sprint_double(ch, d); //!!!!  sprintf(ch,"%f",d);
         delta = int(horizontal_pixels * (d - window_xmin) / (window_xmax - window_xmin));
         taille = strlen(ch) * 4;
-        fl_line(delta, vertical_pixels + STATUS_AREA_PX - 2, delta, vertical_pixels + STATUS_AREA_PX - 1, COLOR_GREEN);
+        fl_line(delta, vertical_pixels + STATUS_AREA_PX - 2, delta, vertical_pixels + STATUS_AREA_PX - 1, green);
         if (delta >= taille / 2 && delta <= horizontal_pixels)
         {
-          text_print(12, ch, delta - taille / 2, vertical_pixels + STATUS_AREA_PX - 2, COLOR_GREEN); //!!!!!!!
+          text_print(12, ch, delta - taille / 2, vertical_pixels + STATUS_AREA_PX - 2, green); //!!!!!!!
         }
       }
       // Y
@@ -2670,8 +3153,8 @@ namespace xcas
         delta = int(vertical_pixels * (window_ymax - d) / (window_ymax - window_ymin));
         if (delta >= taille && delta <= vertical_pixels - taille)
         {
-          fl_line(horizontal_pixels - 2, STATUS_AREA_PX + delta, horizontal_pixels - 1, STATUS_AREA_PX + delta, COLOR_RED);
-          text_print(12, ch, horizontal_pixels - strlen(ch) * 7 - 2, STATUS_AREA_PX + delta + taille, COLOR_RED); //!!!!!!!
+          fl_line(horizontal_pixels - 2, STATUS_AREA_PX + delta, horizontal_pixels - 1, STATUS_AREA_PX + delta, red);
+          text_print(12, ch, horizontal_pixels - strlen(ch) * 7 - 2, STATUS_AREA_PX + delta + taille, red); //!!!!!!!
         }
       }
     }
@@ -2679,6 +3162,7 @@ namespace xcas
     // draw
     fltk_draw(*this, g, x_scale, y_scale, clip_x, clip_y, clip_w, clip_h);
     clip_ymin = save_clip_ymin;
+    draw_decorations();
   }
 
   void Graph2d::left(double d)
@@ -2785,13 +3269,13 @@ namespace xcas
       //  drawRectangle(deltax, deltay, LCD_WIDTH_PX, LCD_HEIGHT_PX,COLOR_BLACK);
       string tmp("x ");
       tmp += printint(int(turtle.x + .5));
-      PrintMini(64, 0, (const unsigned char *)tmp.c_str(), COLOR_BLACK);
+      PrintMini(128, 0, (const unsigned char *)tmp.c_str(), COLOR_BLACK);
       tmp = string("y ");
       tmp += printint(int(turtle.y + .5));
-      PrintMini(85, 0, (const unsigned char *)tmp.c_str(), COLOR_BLACK);
+      PrintMini(85*2, 0, (const unsigned char *)tmp.c_str(), COLOR_BLACK);
       tmp = string("t ");
       tmp += printint(int(turtle.theta + .5));
-      PrintMini(106, 0, (const unsigned char *)tmp.c_str(), COLOR_BLACK);
+      PrintMini(106*2, 0, (const unsigned char *)tmp.c_str(), COLOR_BLACK);
     }
     // draw turtle Logo
     if (turtleptr)
@@ -2872,6 +3356,7 @@ namespace xcas
             {
               if (prec.mark)
               {
+                // CERR << deltax + int(turtlezoom * (prec.x - turtlex) + .5) << " " << deltay + int(LCD_HEIGHT_PX + turtlezoom * (turtley - prec.y) + .5)<< " "<< deltax + int(turtlezoom * (current.x - turtlex) + .5) << " "<< deltay + int(LCD_HEIGHT_PX + turtlezoom * (turtley - current.y) + .5) << " "<<int(prec.color) << "\n";
                 fl_line(deltax + int(turtlezoom * (prec.x - turtlex) + .5), deltay + int(LCD_HEIGHT_PX + turtlezoom * (turtley - prec.y) + .5), deltax + int(turtlezoom * (current.x - turtlex) + .5), deltay + int(LCD_HEIGHT_PX + turtlezoom * (turtley - current.y) + .5), prec.color);
               }
             }

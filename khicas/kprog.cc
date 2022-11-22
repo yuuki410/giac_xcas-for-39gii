@@ -6520,6 +6520,55 @@ namespace giac {
   static define_unary_function_eval (__read,&_read,_read_s);
   define_unary_function_ptr5( at_read ,alias_at_read ,&__read,0,T_RETURN);
 
+  gen _read32(const gen & args,GIAC_CONTEXT){
+    if ( args.type==_STRNG &&  args.subtype==-1) return  args;
+    size_t addr;
+    if (args.type==_VECT && args._VECTptr->size()==2 && args._VECTptr->back().type==_INT_){
+      int n=args._VECTptr->back().val;
+      if (n<=0 || !is_address(args._VECTptr->front(),addr)) 
+	return undef;
+      vecteur res;
+      for (int i=0;i<n;++i){
+	res.push_back(makevecteur((longlong) addr,(longlong) *(unsigned *) addr));
+	addr += 4;
+      }
+      return res;
+    }
+    if (is_address(args,addr))
+      return (longlong) *(unsigned *) addr;
+    return gensizeerr(contextptr);
+  }
+  static const char _read32_s []="read32";
+  static define_unary_function_eval (__read32,&_read32,_read32_s);
+  define_unary_function_ptr5( at_read32 ,alias_at_read32 ,&__read32,0,true);
+
+  gen _write32(const gen & args,GIAC_CONTEXT){
+    if ( args.type==_STRNG &&  args.subtype==-1) return  args;
+    if (args.type!=_VECT)
+      return _read32(args,contextptr);
+    if (args.type==_VECT){
+      vecteur v=*args._VECTptr;
+      size_t addr;
+      if (v.size()==2 && is_address(v.front(),addr)){
+	gen vb=v.back();
+	unsigned * ptr =(unsigned *) addr;
+	if (vb.type==_INT_){
+	  *ptr=vb.val;
+	  return makevecteur(longlong(addr),longlong(*ptr));
+	}
+	if (vb.type==_ZINT){
+	  unsigned l =mpz_get_si(*vb._ZINTptr);
+	  *ptr=l;
+	  return makevecteur(longlong(addr),longlong(*ptr));
+	}
+      }
+    }
+    return gensizeerr(contextptr);
+  }
+  static const char _write32_s []="write32";
+  static define_unary_function_eval (__write32,&_write32,_write32_s);
+  define_unary_function_ptr5( at_write32 ,alias_at_write32,&__write32,0,true);
+
   void add_py(string & fname,GIAC_CONTEXT){
     const char * ptr=fname.c_str();
     int s=strlen(ptr);

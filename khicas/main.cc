@@ -295,7 +295,9 @@ void edit_script(const char *fname)
     edptr->changed = false;
     edptr->python = python_compat(contextptr);
     edptr->elements.clear();
-    edptr->y = 16;//!!!!!
+    edptr->y = 12;//!!!!!
+    edptr->lineHeight=16;
+    edptr->longlinescut=false;
     add(edptr, s);
     s.clear();
     edptr->line = 0;
@@ -488,9 +490,9 @@ giac::gen eqw(const giac::gen &ge, bool editable)
   if (eqdata.dx > 1.5 * LCD_WIDTH_PX || eqdata.dy > 1.5 * LCD_HEIGHT_PX)
   {
     if (eqdata.dx > 2.25 * LCD_WIDTH_PX || eqdata.dy > 2.25 * LCD_HEIGHT_PX)
-      eq.attr = giac::attributs(6, COLOR_WHITE, COLOR_BLACK);
+      eq.attr = giac::attributs(10, COLOR_WHITE, COLOR_BLACK);
     else
-      eq.attr = giac::attributs(8, COLOR_WHITE, COLOR_BLACK);
+      eq.attr = giac::attributs(12, COLOR_WHITE, COLOR_BLACK);
     eq.data = 0; // clear memory
     eq.data = xcas::Equation_compute_size(geq, eq.attr, LCD_WIDTH_PX, contextptr);
     eqdata = xcas::Equation_total_size(eq.data);
@@ -1283,7 +1285,8 @@ bool textedit(char *s)
   ta.clipline = -1;
   ta.changed = false;
   ta.filename = "\\\\fls0\\temp.py";
-  ta.y = 16; // !!!!
+  ta.y = 12; // !!!!
+  ta.lineHeight=16;
   ta.allowEXE = true;
   bool str = s[0] == '"' && s[ss - 1] == '"';
   if (str)
@@ -1385,6 +1388,7 @@ void displaylogo()
   xcas::Turtle t = {&turtle_stack(), 0, 0, 1, 1};
 #endif
   freeze = true; // avoid clearscreen
+  //*logptr(contextptr) << "logo " << int((*t.turtleptr)[0].color) << "\n";
   while (1)
   {
     int save_ymin = clip_ymin;
@@ -1445,203 +1449,258 @@ bool stringtodouble(const string &s1, double &d)
   return true;
 }
 
-void displaygraph(const giac::gen &ge)
-{
+void displaygraph(const giac::gen & ge){
   // graph display
-  // if (aborttimer > 0) { Timer_Stop(aborttimer); Timer_Deinstall(aborttimer);}
+  //if (aborttimer > 0) { Timer_Stop(aborttimer); Timer_Deinstall(aborttimer);}
   xcas::Graph2d gr(ge);
-  gr.show_axes = true;
+  gr.show_axes=true;
   // initial setting for x and y
-  if (ge.type == _VECT)
-  {
-    const_iterateur it = ge._VECTptr->begin(), itend = ge._VECTptr->end();
-    for (; it != itend; ++it)
-    {
-      if (it->is_symb_of_sommet(at_equal))
-      {
-        const gen &f = it->_SYMBptr->feuille;
-        gen &optname = f._VECTptr->front();
-        gen &optvalue = f._VECTptr->back();
-        if (optname.val == _AXES && optvalue.type == _INT_)
-          gr.show_axes = optvalue.val;
-        if (optname.type == _INT_ && optname.subtype == _INT_PLOT && optname.val >= _GL_X && optname.val <= _GL_Z && optvalue.is_symb_of_sommet(at_interval))
-        {
-          //*logptr(contextptr) << optname << " " << optvalue << endl;
-          gen optvf = evalf_double(optvalue._SYMBptr->feuille, 1, contextptr);
-          if (optvf.type == _VECT && optvf._VECTptr->size() == 2)
-          {
-            gen a = optvf._VECTptr->front();
-            gen b = optvf._VECTptr->back();
-            if (a.type == _DOUBLE_ && b.type == _DOUBLE_)
-            {
-              switch (optname.val)
-              {
-              case _GL_X:
-                gr.window_xmin = a._DOUBLE_val;
-                gr.window_xmax = b._DOUBLE_val;
-                gr.update();
-                break;
-              case _GL_Y:
-                gr.window_ymin = a._DOUBLE_val;
-                gr.window_ymax = b._DOUBLE_val;
-                gr.update();
-                break;
-              }
-            }
-          }
-        }
+  if (ge.type==_VECT){
+    const_iterateur it=ge._VECTptr->begin(),itend=ge._VECTptr->end();
+    for (;it!=itend;++it){
+      if (it->is_symb_of_sommet(at_equal)){
+	const gen & f=it->_SYMBptr->feuille;
+	gen & optname = f._VECTptr->front();
+	gen & optvalue= f._VECTptr->back();
+	if (optname.val==_AXES && optvalue.type==_INT_)
+	  gr.show_axes=optvalue.val;
+	if (optname.type==_INT_ && optname.subtype == _INT_PLOT && optname.val>=_GL_X && optname.val<=_GL_Z && optvalue.is_symb_of_sommet(at_interval)){
+	  //*logptr(contextptr) << optname << " " << optvalue << endl;
+	  gen optvf=evalf_double(optvalue._SYMBptr->feuille,1,contextptr);
+	  if (optvf.type==_VECT && optvf._VECTptr->size()==2){
+	    gen a=optvf._VECTptr->front();
+	    gen b=optvf._VECTptr->back();
+	    if (a.type==_DOUBLE_ && b.type==_DOUBLE_){
+	      switch (optname.val){
+	      case _GL_X:
+		gr.window_xmin=a._DOUBLE_val;
+		gr.window_xmax=b._DOUBLE_val;
+		gr.update();
+		break;
+	      case _GL_Y:
+		gr.window_ymin=a._DOUBLE_val;
+		gr.window_ymax=b._DOUBLE_val;
+		gr.update();
+		break;
+	      }
+	    }
+	  }
+	}
       }
     }
   }
+  gr.init_tracemode();
+  if (gr.tracemode & 4)
+    gr.orthonormalize();
   // UI
-  for (;;)
-  {
+  for (;;){
     gr.draw();
-    PrintMini(0, F_KEY_BAR_Y_START - F_BAR_FONT_HEIGHT, (const unsigned char *)"menu", MINI_REV); //!!!!
+    PrintMini(1,114,(const unsigned char*)"menu",MINI_REV);
     unsigned int key;
-    ck_getkey((int *)&key);
-    if (key == KEY_CTRL_F1)
-    {
-      char menu_xmin[32], menu_xmax[32], menu_ymin[32], menu_ymax[32];
+    int keyflag = (unsigned char)Setup_GetEntry(0x14);
+    bool alph=keyflag==4||keyflag==0x84||keyflag==8||keyflag==0x88;
+    ck_getkey(&key);
+    if (key==KEY_CTRL_F1 || key==KEY_CTRL_F6){
+      char menu_xmin[32],menu_xmax[32],menu_ymin[32],menu_ymax[32];
       ustl::string s;
-      s = "xmin " + print_DOUBLE_(gr.window_xmin, 6);
-      strcpy(menu_xmin, s.c_str());
-      s = "xmax " + print_DOUBLE_(gr.window_xmax, 6);
-      strcpy(menu_xmax, s.c_str());
-      s = "ymin " + print_DOUBLE_(gr.window_ymin, 6);
-      strcpy(menu_ymin, s.c_str());
-      s = "ymax " + print_DOUBLE_(gr.window_ymax, 6);
-      strcpy(menu_ymax, s.c_str());
+      s="xmin "+print_DOUBLE_(gr.window_xmin,6);
+      strcpy(menu_xmin,s.c_str());
+      s="xmax "+print_DOUBLE_(gr.window_xmax,6);
+      strcpy(menu_xmax,s.c_str());
+      s="ymin "+print_DOUBLE_(gr.window_ymin,6);
+      strcpy(menu_ymin,s.c_str());
+      s="ymax "+print_DOUBLE_(gr.window_ymax,6);
+      strcpy(menu_ymax,s.c_str());
       Menu smallmenu;
-      smallmenu.numitems = 12;
+      smallmenu.numitems=15;
       MenuItem smallmenuitems[smallmenu.numitems];
-      smallmenu.items = smallmenuitems;
-      smallmenu.height =  8; //!!!!!
-      // smallmenu.title = "KhiCAS";
-      smallmenuitems[0].text = (char *)menu_xmin;
-      smallmenuitems[1].text = (char *)menu_xmax;
-      smallmenuitems[2].text = (char *)menu_ymin;
-      smallmenuitems[3].text = (char *)menu_ymax;
-      smallmenuitems[4].text = (char *)"Orthonormalize /";
-      smallmenuitems[5].text = (char *)"Autoscale *";
-      smallmenuitems[6].text = (char *)("Zoom in +");
-      smallmenuitems[7].text = (char *)("Zoom out -");
-      smallmenuitems[8].text = (char *)("Y-Zoom out (-)");
-      smallmenuitems[9].text = (char *)(giac::lang ? "Voir axes" : "Show axes");
-      smallmenuitems[10].text = (char *)(giac::lang ? "Cacher axes" : "Hide axes");
-      smallmenuitems[11].text = (char *)(giac::lang ? "Quitter" : "Quit");
+      smallmenu.items=smallmenuitems;
+      smallmenu.height=8;
+      //smallmenu.title = "KhiCAS";
+      smallmenuitems[0].text = (char *) (giac::lang?"Etude graphe (xtt)":"Curve study (xtt)");
+      smallmenuitems[1].text = (char *) menu_xmin;
+      smallmenuitems[2].text = (char *) menu_xmax;
+      smallmenuitems[3].text = (char *) menu_ymin;
+      smallmenuitems[4].text = (char *) menu_ymax;
+      smallmenuitems[5].text = (char*) "Orthonormalize /";
+      smallmenuitems[6].text = (char*) "Autoscale *";
+      smallmenuitems[7].text = (char *) ("Zoom in +");
+      smallmenuitems[8].text = (char *) ("Zoom out -");
+      smallmenuitems[9].text = (char *) ("Y-Zoom out (-)");
+      smallmenuitems[10].text = (char*) ((lang==1)?"Voir axes":"Show axes");
+      smallmenuitems[10].type = MENUITEM_CHECKBOX;
+      smallmenuitems[10].value = gr.show_axes;
+      smallmenuitems[11].text = (char*) ((lang==1)?"Voir tangent (F3)":"Show tangent (F3)");
+      smallmenuitems[11].type = MENUITEM_CHECKBOX;
+      smallmenuitems[11].value = (gr.tracemode & 2)!=0;
+      smallmenuitems[12].text = (char*) ((lang==1)?"Voir normal (F4)":"Show normal (F4)");
+      smallmenuitems[12].type = MENUITEM_CHECKBOX;
+      smallmenuitems[12].value = (gr.tracemode & 4)!=0;
+      smallmenuitems[13].text = (char*) ((lang==1)?"Voir cercle (F5)":"Show circle (F5)");
+      smallmenuitems[13].type = MENUITEM_CHECKBOX;
+      smallmenuitems[13].value = (gr.tracemode & 8)!=0;
+      smallmenuitems[14].text = (char*)(giac::lang?"Quitter":"Quit");
       int sres = doMenu(&smallmenu);
-      if (sres == MENU_RETURN_SELECTION)
-      {
-        const char *ptr = 0;
-        ustl::string s1;
-        double d;
-        if (smallmenu.selection == 1)
-        {
-          inputline(menu_xmin, lang ? "Nouvelle valeur?" : "New value?", s1, false); /* numeric value expected */
-          if (stringtodouble(s1, d))
-          {
-            gr.window_xmin = d;
-            gr.update();
-          }
-        }
-        if (smallmenu.selection == 2)
-        {
-          inputline(menu_xmax, lang ? "Nouvelle valeur?" : "New value?", s1, false); /* numeric value expected */
-          if (stringtodouble(s1, d))
-          {
-            gr.window_xmax = d;
-            gr.update();
-          }
-        }
-        if (smallmenu.selection == 3)
-        {
-          inputline(menu_ymin, lang ? "Nouvelle valeur?" : "New value?", s1, false); /* numeric value expected */
-          if (stringtodouble(s1, d))
-          {
-            gr.window_ymin = d;
-            gr.update();
-          }
-        }
-        if (smallmenu.selection == 4)
-        {
-          inputline(menu_ymax, lang ? "Nouvelle valeur?" : "New value?", s1, false); /* numeric value expected */
-          if (stringtodouble(s1, d))
-          {
-            gr.window_ymax = d;
-            gr.update();
-          }
-        }
-        if (smallmenu.selection == 5)
-          gr.orthonormalize();
-        if (smallmenu.selection == 6)
-          gr.autoscale();
-        if (smallmenu.selection == 7)
-          gr.zoom(0.7);
-        if (smallmenu.selection == 8)
-          gr.zoom(1 / 0.7);
-        if (smallmenu.selection == 9)
-          gr.zoomy(1 / 0.7);
-        if (smallmenu.selection == 10)
-          gr.show_axes = true;
-        if (smallmenu.selection == 11)
-          gr.show_axes = false;
-        if (smallmenu.selection == 12)
-          break;
+      if(sres == MENU_RETURN_SELECTION) {
+	const char * ptr=0;
+	ustl::string s1; double d;
+	if (smallmenu.selection==1){
+	  gr.curve_infos();
+	  continue;
+	}
+	if (smallmenu.selection==2){
+	  inputline(menu_xmin,lang?"Nouvelle valeur?":"New value?",s1,false); /* numeric value expected */
+	  if (stringtodouble(s1,d)){
+	    gr.window_xmin=d;
+	    gr.update();
+	  }
+	}
+	if (smallmenu.selection==3){
+	  inputline(menu_xmax,lang?"Nouvelle valeur?":"New value?",s1,false); /* numeric value expected */
+	  if (stringtodouble(s1,d)){
+	    gr.window_xmax=d;
+	    gr.update();
+	  }
+	}
+	if (smallmenu.selection==4){
+	  inputline(menu_ymin,lang?"Nouvelle valeur?":"New value?",s1,false); /* numeric value expected */
+	  if (stringtodouble(s1,d)){
+	    gr.window_ymin=d;
+	    gr.update();
+	  }
+	}
+	if (smallmenu.selection==5){
+	  inputline(menu_ymax,lang?"Nouvelle valeur?":"New value?",s1,false); /* numeric value expected */
+	  if (stringtodouble(s1,d)){
+	    gr.window_ymax=d;
+	    gr.update();
+	  }
+	}
+	if (smallmenu.selection==6)
+	  gr.orthonormalize();
+	if (smallmenu.selection==7)
+	  gr.autoscale();	
+	if (smallmenu.selection==8)
+	  gr.zoom(0.7);	
+	if (smallmenu.selection==9)
+	  gr.zoom(1/0.7);	
+	if (smallmenu.selection==10)
+	  gr.zoomy(1/0.7);
+	if (smallmenu.selection==11)
+	  gr.show_axes=!gr.show_axes;	
+	if (smallmenu.selection==12){
+	  if (gr.tracemode & 2)
+	    gr.tracemode &= ~2;
+	  else
+	    gr.tracemode |= 2;
+	  gr.tracemode_set();
+	}
+	if (smallmenu.selection==13){
+	  if (gr.tracemode & 4)
+	    gr.tracemode &= ~4;
+	  else {
+	    gr.tracemode |= 4;
+	    gr.orthonormalize();
+	  }
+	  gr.tracemode_set();
+	}
+	if (smallmenu.selection==14){
+	  if (gr.tracemode & 8)
+	    gr.tracemode &= ~8;
+	  else {
+	    gr.tracemode |= 8;
+	    gr.orthonormalize();
+	  }
+	  gr.tracemode_set();
+	}
+	if (smallmenu.selection==15)
+	  break;
       }
     }
-    if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_MENU)
+    if (key==KEY_CTRL_EXIT || key==KEY_CTRL_AC || key==KEY_CTRL_MENU)
       break;
-    if (key == KEY_CTRL_UP)
-    {
-      gr.up((gr.window_ymax - gr.window_ymin) / 5);
+    if (key==KEY_CTRL_F2){
+      gr.tracemode_set(-1); // object info
+      continue;
     }
-    if (key == KEY_CTRL_PAGEUP)
-    {
-      gr.up((gr.window_ymax - gr.window_ymin) / 2);
+    if (key==KEY_CTRL_F3){
+      if (gr.tracemode & 2)
+	gr.tracemode &= ~2;
+      else
+	gr.tracemode |= 2;
+      gr.tracemode_set();
+      continue;
     }
-    if (key == KEY_CTRL_DOWN)
-    {
-      gr.down((gr.window_ymax - gr.window_ymin) / 5);
+    if (key==KEY_CTRL_F4){
+      if (gr.tracemode & 4)
+	gr.tracemode &= ~4;
+      else
+	gr.tracemode |= 4;
+      gr.tracemode_set();
+      continue;
     }
-    if (key == KEY_CTRL_PAGEDOWN)
-    {
-      gr.down((gr.window_ymax - gr.window_ymin) / 2);
+    if (key==KEY_CTRL_F5){
+      if (gr.tracemode & 8)
+	gr.tracemode &= ~8;
+      else {
+	gr.tracemode |= 8;
+	gr.orthonormalize();
+      }
+      gr.tracemode_set();
+      continue;
     }
-    if (key == KEY_CTRL_LEFT)
-    {
-      gr.left((gr.window_xmax - gr.window_xmin) / 5);
+    if (key==KEY_CTRL_XTT || key=='\t'){
+      gr.curve_infos();
+      continue;
     }
-    if (key == KEY_CTRL_RIGHT)
-    {
-      gr.right((gr.window_xmax - gr.window_xmin) / 5);
+    if (key==KEY_CTRL_UP){
+      if (gr.tracemode && !alph){
+	--gr.tracemode_n;
+	gr.tracemode_set();
+	continue;
+      }
+      gr.up((gr.window_ymax-gr.window_ymin)/5);
     }
-    if (key == KEY_CHAR_PLUS)
-    {
-      gr.zoom(0.7);
+    if (key==KEY_CTRL_PAGEUP) { gr.up((gr.window_ymax-gr.window_ymin)/2); }
+    if (key==KEY_CTRL_DOWN) {
+      if (gr.tracemode && !alph){
+	++gr.tracemode_n;
+	gr.tracemode_set();
+	continue;
+      }
+      gr.down((gr.window_ymax-gr.window_ymin)/5);
     }
-    if (key == KEY_CHAR_MINUS)
-    {
-      gr.zoom(1 / 0.7);
+    if (key==KEY_CTRL_PAGEDOWN) { gr.down((gr.window_ymax-gr.window_ymin)/2);}
+    if (key==KEY_CTRL_LEFT) {
+      if (gr.tracemode && !alph){
+	if (gr.tracemode_i!=int(gr.tracemode_i))
+	  gr.tracemode_i=std::floor(gr.tracemode_i);
+	else
+	  --gr.tracemode_i;
+	gr.tracemode_set();
+	continue;
+      }
+      gr.left((gr.window_xmax-gr.window_xmin)/5);
     }
-    if (key == KEY_CHAR_PMINUS)
-    {
-      gr.zoomy(1 / 0.7);
+    if (key==KEY_CTRL_RIGHT) {
+      if (gr.tracemode && !alph){
+	if (int(gr.tracemode_i)!=gr.tracemode_i)
+	  gr.tracemode_i=std::ceil(gr.tracemode_i);
+	else
+	  ++gr.tracemode_i;
+	gr.tracemode_set();
+	continue;
+      }
+      gr.right((gr.window_xmax-gr.window_xmin)/5);
     }
-    if (key == KEY_CHAR_MULT)
-    {
-      gr.autoscale();
-    }
-    if (key == KEY_CHAR_DIV)
-    {
-      gr.orthonormalize();
-    }
-    if (key == KEY_CTRL_VARS || key == KEY_CTRL_OPTN)
-    {
-      gr.show_axes = !gr.show_axes;
-    }
+    if (key==KEY_CHAR_PLUS) { gr.zoom(0.7);}
+    if (key==KEY_CHAR_MINUS){ gr.zoom(1/0.7); }
+    if (key==KEY_CHAR_PMINUS){ gr.zoomy(1/0.7); }
+    if (key==KEY_CHAR_MULT){ gr.autoscale(); }
+    if (key==KEY_CHAR_DIV) { gr.orthonormalize(); }
+    if (key==KEY_CTRL_VARS || key==KEY_CTRL_OPTN) {gr.show_axes=!gr.show_axes;}
   }
-}
+}  
 
 void check_do_graph(giac::gen &ge, int do_logo_graph_eqw)
 {
@@ -1817,28 +1876,10 @@ extern char sextra, eextra;
 
 int kcas_main(int isAppli, unsigned short OptionNum)
 {
-#ifdef GINT
-  /* À appeler une seule fois au début de l'exécution */
-  kmalloc_init();
 
-  /* Ajouter une arène sur la RAM inutilisée */
-  static kmalloc_arena_t static_ram = {0};
-  static_ram.name = "_uram";
-  static_ram.is_default = 1; // 0 for system malloc first
-#ifdef VAR_HEAP
-  static_ram.start = malloc_heap;
-  static_ram.end = malloc_heap + sizeof(malloc_heap);
-#else
-  // void *malloc_start = &sextra;
-  // void *malloc_end = &eextra;
-  // int malloc_size = malloc_end - malloc_start;
-  static_ram.start = &sextra;
-  static_ram.end = &eextra;
-#endif
-  kmalloc_init_arena(&static_ram, true);
-  kmalloc_add_arena(&static_ram);
-#endif
-
+  tab16=(four_int*) malloc(4096);    // ALLOC16*16=4096 ALLOC16=256
+  tab24=(six_int*) malloc(12*32*24);    // ALLOC24*24 ALLOC24=12*24
+  tab48=(twelve_int*) malloc(6144); // kgen.cc ALLOC48*48=1.5*4096, ALLOC48=128
   unsigned int key;
   unsigned char *expr;
   unsigned char *user_functions;
@@ -1856,9 +1897,6 @@ int kcas_main(int isAppli, unsigned short OptionNum)
   turtle_stack(); // required to init turtle
 #endif
 
-#ifdef TEX
-  TeX_init();
-#endif
   Console_Init();
   context ct;
   contextptr = &ct;
@@ -1868,9 +1906,6 @@ int kcas_main(int isAppli, unsigned short OptionNum)
   Console_Disp();
   //init_locale();
   lang = 0;
-  // Bkey_SetAllFlags(0x80); // disable catalog syscall 0x0EA1 on the Prizm
-  //  initialize failed ?
-  //  if (!(line && free_stack && mem && stack && symtab && binding && arglist && logbuf))		return 0;
 
   while (Setup[i] != NULL)
   {
@@ -1879,55 +1914,6 @@ int kcas_main(int isAppli, unsigned short OptionNum)
 
   i = 0;
 
-  user_functions = (unsigned char *)memory_load(USER_FUNCTIONS);
-
-  // Just extracting each line of the file containing user functions and running them one by one
-
-  if (user_functions != NULL)
-  {
-    int line_count = 0;
-    do
-    {
-      j = 0;
-      line_count++;
-
-      memset(line, '\0', USER_FUNCTIONS_MAX_LENGTH * sizeof(unsigned char));
-
-      while (i < strlen((char *)user_functions) && j < USER_FUNCTIONS_MAX_LENGTH && user_functions[i] != '\n' && user_functions[i] != '\r' && user_functions[i] != '\0')
-      {
-        line[j++] = user_functions[i++];
-      }
-
-      run((char *)line);
-
-      // Printing the error message if needed
-
-      if (Console_GetEditLine()[0] != '\0')
-      {
-        char line_number[15] = ""; // That should be enough...
-
-        // Printing the actual error message
-        Console_NewLine(LINE_TYPE_OUTPUT, 1);
-
-        // More details on where the error is
-        Console_Output((const unsigned char *)"\xE6\x92 USER.eig line : ");
-        sprintf(line_number, "%d", line_count);
-        strcat(line_number, " ");
-        Console_Output((unsigned char *)line_number);
-        Console_NewLine(LINE_TYPE_INPUT, 1);
-        Console_Disp();
-      }
-      i += 2;
-    } while (line[0] != '\0');
-
-    free(user_functions);
-
-    Console_Output((unsigned char *)" ");
-    Console_NewLine(LINE_TYPE_OUTPUT, 1);
-    Console_Disp();
-  }
-
-  free(line);
 
   while (1)
   {

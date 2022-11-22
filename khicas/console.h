@@ -10,6 +10,8 @@
 #include <string.h>
 #include "libfx.h"
 
+extern "C" int shell_fontw,shell_fonth;
+
 const char * input_matrix(bool list);
 ustl::string help_insert(const char * cmdline,int & back,bool warn);
 #define MAX_FILENAME_SIZE 270
@@ -19,9 +21,9 @@ void save_console_state_smem(const char * filename);
 bool load_console_state_smem(const char * filename);
 
 enum CONSOLE_SCREEN_SPEC{
-  COL_LINE_MAX = 37,      //!!!!!!! 32
-  LINE_DISP_MAX = 7,      //!!!!!!!  7
-  COL_DISP_MAX = 40,//21  //!!!!!!! 21
+  COL_LINE_MAX = 27,      //!!!!!!! 32
+  LINE_DISP_MAX = 6,      //!!!!!!!  7
+  COL_DISP_MAX = 31,//21  //!!!!!!! 21
   EDIT_LINE_MAX = 2048
 };
 

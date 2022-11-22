@@ -19,6 +19,7 @@ extern "C"
 //#define POPUP_PRETTY 1
 #define POPUP_PRETTY_STR "Pretty print"
 
+  int shell_x=0,shell_y=0,shell_fontw=8,shell_fonth=16;
 struct line *Line;
 char menu_f1[8] = {0}, menu_f2[8] = {0}, menu_f3[8] = {0}, menu_f4[8] = {0}, menu_f5[8] = {0}, menu_f6[8];
 char session_filename[MAX_FILENAME_SIZE + 1] = "session";
@@ -32,6 +33,23 @@ int dconsole_mode = 1;   // 0 disables dConsole commands
 
 #define Current_Line (Start_Line + Cursor.y)
 #define Current_Col (Line[Cursor.y + Start_Line].start_col + Cursor.x)
+
+void locate(int x, int y) {
+  shell_x=x; shell_y=y;
+  // vGL_ConsLocate(x, y);
+}
+
+extern "C" void vGL_putString(int x0, int y0, char *s, int fg, int bg, int fontSize) ;
+
+void PrintRev(unsigned char *s) {
+  vGL_putString(shell_x*shell_fontw, shell_y*shell_fonth, (char *)s, 255, 0, shell_fonth);
+  // vGL_ConsOut((char *)s, true);
+} 
+void Print(unsigned char *s) {
+  vGL_putString(shell_x*shell_fontw, shell_y*shell_fonth, (char *)s, 0,255, shell_fonth);
+  //vGL_ConsOut((char *)s, false);
+}
+
 
 #if 0
 void create_data_folder() {
@@ -146,21 +164,35 @@ int run_session(int start = 0)
   if (v.empty())
     return 0;
   // Console_Init();
-  for (int i = 0; i < v.size(); ++i)
-  {
+  for (int i=0;i<v.size();++i){
     Console_Output((const unsigned char *)v[i].c_str());
-    // int j=Last_Line;
+    //int j=Last_Line;
     Console_NewLine(LINE_TYPE_INPUT, 1);
-    // Line[j].type=LINE_TYPE_INPUT;
-    run(v[i].c_str(), 6); /* show logo and graph but not eqw */
-    // j=Last_Line;
-    Console_NewLine(LINE_TYPE_OUTPUT, 1);
-    // Line[j].type=LINE_TYPE_OUTPUT;
     Console_Disp();
     Bdisp_PutDisp_DD();
+    // Line[j].type=LINE_TYPE_INPUT;
+    run(v[i].c_str(),6); /* show logo and graph but not eqw */
+    // j=Last_Line;
+    Console_NewLine(LINE_TYPE_OUTPUT, 1);    
+    // Line[j].type=LINE_TYPE_OUTPUT;
   }
-  Cursor.y += (Start_Line - savestartline);
-  Start_Line = savestartline;
+  int cl=Current_Line;
+  Cursor.y += (Start_Line-savestartline);
+  if (Cursor.y<0) Cursor.y=0;
+  Start_Line=savestartline;
+  int l8=LINE_DISP_MAX+1;
+  if (Current_Line>cl || Cursor.y>l8){
+    if (cl>l8){
+      Start_Line=cl-l8;
+      Cursor.y=l8;
+    }
+    else {
+      Start_Line=0;
+      Cursor.y=cl;
+    }
+  }
+  Console_Disp();
+  Bdisp_PutDisp_DD();
   return 0;
 }
 #else
@@ -248,7 +280,8 @@ bool load_console_state_smem(const char *filename)
       edptr->changed = false;
       edptr->python = python_compat(contextptr);
       edptr->elements.clear();
-      edptr->y = 7; //!!!!!!!!! 7
+      edptr->y = 12; //!!!!!!!!! 7
+      edptr->lineHeight=16;
       add(edptr, bufscript);
       edptr->line = 0;
       // edptr->line=edptr->elements.size()-1;
@@ -1891,8 +1924,12 @@ int Console_GetKey()
         Console_Insert_Line();
         Console_Insert_Line();
       }
-      else
-        Console_Input((const unsigned char *)":=");
+      else {
+        int c=giac::chartab();
+        char s[2]={0};
+        if (c>32 && c<127) s[0]=char(c);
+        Console_Input(s);
+      }
       Console_Disp();
       continue;
     }
@@ -2069,18 +2106,19 @@ const char *Console_Draw_FMenu(int key, struct FMenu *menu, unsigned char *cfg, 
       longest = strlen(entries[i]);
 
   position_x = 21 * position_number;
-  if (position_x + longest * 4 + quick_len * 4 > 115)
-    position_x = 115 - longest * 4 - quick_len * 4;
+  if (position_x + longest * 8 + quick_len * 8 > 115)
+    position_x = 115 - longest * 8 - quick_len * 8;
 
   box.left = position_x;
-  box.right = position_x + longest * 4 + quick_len * 4 + 6;
-  box.bottom = 98 - 7;  //!!!!!
-  box.top = 98 - 7 - nb_entries * 7; //!!!!!
-
+  box.right = position_x + longest * 8 + quick_len * 8 + 6;
+  box.bottom = 110;  
+  box.top = box.bottom - nb_entries * 12; 
+  //giac::confirm((giac::print_INT_(box.left)+" "+giac::print_INT_(box.top)).c_str(),(giac::print_INT_(box.right)+" "+giac::print_INT_(box.bottom)).c_str(),false);
   Bdisp_AreaClr_VRAM(&box);
-
-  Bdisp_DrawLineVRAM(box.left, box.bottom, box.left, box.top);
-  Bdisp_DrawLineVRAM(box.right, box.bottom, box.right, box.top);
+  giac::freeze=true; // temporary workaround
+  giac::draw_line(box.left, box.bottom, box.left, box.top,0,0xffff);
+  giac::draw_line(box.right, box.bottom, box.right, box.top,0,0xffff);
+  giac::freeze=false;
 
   // If the cursor is flashing on the opening box, disable it. //!!!!!!
   if (((Cursor.x * (256 / 21) < box.right && Cursor.x * (256 / 21) > box.left)) && ((Cursor.y * (128 / 8) < box.bottom) && (Cursor.y * (128 / 8) > box.top)))
@@ -2092,9 +2130,9 @@ const char *Console_Draw_FMenu(int key, struct FMenu *menu, unsigned char *cfg, 
     {
       quick[0] = '0' + (i + 1);
       PrintMini(3 + position_x, box.bottom - 11 * (i + 1), (unsigned char *)quick, MINI_OVER); //!!!!!
-      PrintMini(3 + position_x + quick_len * 4, box.bottom - 11 * (i + 1), (unsigned char *)entries[i], MINI_OVER); //!!!!!
+      PrintMini(3 + position_x + quick_len * 8, box.bottom - 11 * (i + 1), (unsigned char *)entries[i], MINI_OVER); //!!!!!
     }
-    PrintMini(3 + position_x + quick_len * 4, box.bottom - 11 * (selector + 1), (unsigned char *)entries[selector], MINI_REV); //!!!!!
+    PrintMini(3 + position_x + quick_len * 8, box.bottom - 11 * (selector + 1), (unsigned char *)entries[selector], MINI_REV); //!!!!!
     ck_getkey((int *)&input_key);
     if (input_key == KEY_CTRL_EXIT || input_key == KEY_CTRL_AC)
       return 0;
@@ -2323,16 +2361,16 @@ int Console_Disp()
 
       if (curline.start_col > 0)
       {
-        locate(1, i + 1);
+        locate(0, i + 1);
 
         if (curline.readonly)
         {
           Cursor_SetFlashMode(0);
-          PrintRev((unsigned char *)"\xE6\x9A");
+          Print((unsigned char *)"<");
         }
         else
         {
-          Print((unsigned char *)"\xE6\x9A");
+          PrintRev((unsigned char *)"<");
         }
       }
 
@@ -2344,12 +2382,12 @@ int Console_Disp()
           if (curline.disp_len - curline.start_col != COL_DISP_MAX)
           {
             Cursor_SetFlashMode(0);
-            PrintRev((unsigned char *)"\xE6\x9B");
+            Print((unsigned char *)">"); 
           }
         }
         else if (Cursor.x < COL_DISP_MAX - 1)
         {
-          Print((unsigned char *)"\xE6\x9B");
+          PrintRev((unsigned char *)">");
         }
       }
 
@@ -2446,7 +2484,7 @@ int Console_Disp()
   PrintMini(0, F_KEY_BAR_Y_START, (const unsigned char *)menu.c_str(), MINI_REV); //!!!!!!
 #endif
   // clock, if there is room in editlin
-  if (Last_Line < 5 || strlen((const char *)Line[Last_Line].str) < 5)
+  if (1 || Last_Line < 5 || strlen((const char *)Line[Last_Line].str) < 5)
   {
     ustl::string status;
     if (1)
@@ -2477,7 +2515,7 @@ int Console_Disp()
       // k &= 0x7fffffff;
       status += giac::hexa_print_INT_((int)k);
     }
-    PrintMini(CLOCK_STATUS_BAR_OFFSET_X, F_KEY_BAR_Y_START - F_BAR_FONT_HEIGHT, (unsigned char *)status.c_str(), MINI_REV); //!!!!
+    PrintMini(CLOCK_STATUS_BAR_OFFSET_X, 0, (unsigned char *)status.c_str(), MINI_REV); //!!!!
   }
   Bdisp_PutDisp_DD();
   return CONSOLE_SUCCEEDED;

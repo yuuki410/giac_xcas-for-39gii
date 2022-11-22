@@ -3431,8 +3431,10 @@ namespace giac {
   logo_turtle * turtleptr=0;
   
   logo_turtle & turtle(){
-    if (!turtleptr)
+    if (!turtleptr){
       turtleptr=new logo_turtle;
+      turtleptr->color=255;
+    }
     return * turtleptr;
   }
   

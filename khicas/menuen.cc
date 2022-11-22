@@ -20,10 +20,10 @@
 typedef scrollbar TScrollbar;
 #endif
 
-#define C24 12 // 24 on 90
-#define C18 10 // 18
-#define C10 8 // 18
-#define C6 6   // 6
+#define C24 16 // 24 on 90
+#define C18 16 // 18
+#define C10 16 // 18
+#define C6 4   // 6
 
 int doMenu(Menu *menu, MenuItemIcon *icontable)
 {                                 // returns code telling what user did. selection is on menu->selection. menu->selection starts at 1!
@@ -95,7 +95,7 @@ int doMenu(Menu *menu, MenuItemIcon *icontable)
             int fillerRequired = menu->width - MB_ElementCount(menu->items[curitem].text) - (menu->type == MENUTYPE_MULTISELECT ? 2 : 3);
             for (int i = 0; i < fillerRequired; i++)
               strcat(menuitem, " ");
-            PrintXY(6 * menu->startX, 12 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)menuitem, (menu->selection == curitem + 1 ? TEXT_MODE_INVERT : TEXT_MODE_NORMAL));
+            PrintXY(C6 * menu->startX, C24 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)menuitem, (menu->selection == curitem + 1 ? TEXT_MODE_INVERT : TEXT_MODE_NORMAL));
           }
           else
           { //!!!!!
@@ -108,7 +108,7 @@ int doMenu(Menu *menu, MenuItemIcon *icontable)
           // deal with menu items of type MENUITEM_CHECKBOX
           if (menu->items[curitem].type == MENUITEM_CHECKBOX)
           { //!!!!!
-            PrintXY(6 * (menu->startX + menu->width - 1), 12 * (curitem + itemsStartY - menu->scroll),
+            PrintXY(C6 * (menu->startX + menu->width - 1), C24 * (curitem + itemsStartY - menu->scroll),
                     //(menu->items[curitem].value == MENUITEM_VALUE_CHECKED ? (const unsigned char *)"\xe6\xa9" : (const unsigned char *)"\xe6\xa5"), //!!!!
                     (menu->items[curitem].value == MENUITEM_VALUE_CHECKED ? (const unsigned char *)"YES" : (const unsigned char *)"NO "),
                     (menu->selection == curitem + 1 ? TEXT_MODE_INVERT : (menu->pBaRtR == 1 ? TEXT_MODE_NORMAL : TEXT_MODE_NORMAL)));
@@ -134,12 +134,12 @@ int doMenu(Menu *menu, MenuItemIcon *icontable)
               if (menu->selection == curitem + 1)
               {
                 //PrintXY(6 * menu->startX, 12 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)"\xe6\x9b", TEXT_MODE_NORMAL); //!!!!!
-                PrintXY(6 * menu->startX, 12 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)"YES", TEXT_MODE_NORMAL); //!!!!!
+                PrintXY(C6 * menu->startX, C24 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)"YES", TEXT_MODE_NORMAL); //!!!!!
               }
               else
               {
                 //PrintXY(6 * menu->startX, 12 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)"\xe6\x9b", TEXT_MODE_NORMAL); //!!!!!
-                PrintXY(6 * menu->startX, 12 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)"YES", TEXT_MODE_NORMAL); //!!!!!
+                PrintXY(C6 * menu->startX, C24 * (curitem + itemsStartY - menu->scroll), (const unsigned char *)"YES", TEXT_MODE_NORMAL); //!!!!!
               }
             }
           }
@@ -175,14 +175,14 @@ int doMenu(Menu *menu, MenuItemIcon *icontable)
         PrintMini(textX, textY, (const unsigned char *)menu->title, 0);
       }
       else
-        PrintXY(6 * menu->startX, 12 * menu->startY, (const unsigned char *)menu->title, TEXT_MODE_NORMAL); //!!!!
+        PrintXY(C6 * menu->startX, C24 * menu->startY, (const unsigned char *)menu->title, TEXT_MODE_NORMAL); //!!!!
       if (menu->subtitle != NULL)
       {
         int textX = (MB_ElementCount(menu->title) + menu->startX - 1) * C18 + C10, textY = C6;
         PrintMini(textX, textY, (const unsigned char *)menu->subtitle, 0);
       }
-      PrintXY(104, 1, (const unsigned char *)"____", 0);
-      PrintXY(104, 1, (const unsigned char *)keyword, 0);
+      PrintXY(208, 1, (const unsigned char *)"____", 0);
+      PrintXY(208, 1, (const unsigned char *)keyword, 0);
     }
     /*if(menu->darken) {
       DrawFrame(COLOR_BLACK);
@@ -904,7 +904,7 @@ int doCatalogMenu(char *insertText, const char *title, int category, const char 
     menu.scrollout = 1;
     menu.title = (char *)title;
     menu.type = MENUTYPE_FKEYS;
-    menu.height = 8; //!!!!!
+    menu.height = 7; //!!!!!
     while (1)
     {
       drawRectangle(0, F_KEY_BAR_Y_START - 2, LCD_WIDTH_PX, 12, COLOR_BLACK); //!!!!

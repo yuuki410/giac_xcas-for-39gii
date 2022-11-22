@@ -6310,7 +6310,7 @@ int step_param(const gen &f, const gen &g, const gen &t, gen &tmin, gen &tmax, v
     if (x0 < 0 || x0 >= LCD_WIDTH_PX || y0 < clip_ymin || y0 >= LCD_HEIGHT_PX)
       return;
 #if 1
-    Bdisp_SetPoint_VRAM(x0, y0, color ? 1 : 0);
+    Bdisp_SetPoint_VRAM(x0, y0, color);
 #else
   unsigned short *VRAM = (unsigned short *)GetVRAMAddress();
   VRAM += (y0 * LCD_WIDTH_PX + x0);
@@ -6519,7 +6519,7 @@ int step_param(const gen &f, const gen &g, const gen &t, gen &tmin, gen &tmax, v
     if (width <= 0 || height <= 0)
       return;
 #if 1
-    DISPBOX d = {x, y, x + width - 1, y + height - 1};
+    DISPBOX d = {x, x + width - 1, y, y + height - 1};
     //Bdisp_AreaClr_VRAM(&d);
     Bdisp_AreaFillVRAM(&d, color);
     //if (color)
@@ -6550,13 +6550,19 @@ int step_param(const gen &f, const gen &g, const gen &t, gen &tmin, gen &tmax, v
   }
 
   // Uses the Bresenham line algorithm
-  void draw_line(int x1, int y1, int x2, int y2, int color, unsigned short motif)
-  {
+  void draw_line(int x1, int y1, int x2, int y2, int color, unsigned short motif){
+    if ( (absint(x1) & 0xfffff000) ||
+	 (absint(x2) & 0xfffff000) ||
+	 (absint(y1) & 0xfffff000) ||
+	 (absint(y2) & 0xfffff000) 
+	 )
+      return;
     int w = (color & 0x00070000) >> 16;
     ++w;
     color &= 0xffff;
     if ((x1 < 0 && x2 < 0) || (x1 >= LCD_WIDTH_PX && x2 >= LCD_WIDTH_PX) || (y1 < clip_ymin && y2 < clip_ymin) || (y1 >= LCD_HEIGHT_PX && y2 >= LCD_HEIGHT_PX))
       return;
+    //CERR << x1 << " " << y1 <<" "<< x2 << " " << y2 << " " << color << "\n";
     signed char ix;
     signed char iy;
     // if x1 == x2 or y1 == y2, then it does not matter what we set here
@@ -6702,6 +6708,53 @@ int step_param(const gen &f, const gen &g, const gen &t, gen &tmin, gen &tmax, v
     return v[smallmenu.selection - 1];
   }
 
+  int chartab(){
+    static int row=0,col=0;
+    for (;;){
+      int cur=32+16*row+col;
+      col &= 0xf;
+      if (row<0) row=5; else if (row>5) row=0;
+      // display table
+      drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,COLOR_WHITE);
+      // os_draw_string(0,0,COLOR_BLACK,COLOR_WHITE,lang==1?"Selectionner caractere":"Select char");
+      PrintXY(0,0,(const unsigned char *) (lang==1?"shift Char: table de caracteres":"shift Char: char table"),TEXT_MODE_NORMAL);
+      int dy=12;
+      for (int r=0;r<6;++r){
+        for (int c=0;c<16;++c){
+          int currc=32+16*r+c;
+          unsigned char buf[2]={currc==127?(unsigned char)'X':(unsigned char)currc,0};
+          PrintXY(12*c,dy+16*r,buf,cur==currc?MINI_REV:0);
+        }
+      }
+      string s("Current ");
+      s += char(cur);
+      s += " ";
+      s += giac::print_INT_(cur);
+      s += " ";
+      s += giac::hexa_print_INT_(cur);
+      PrintXY(0,112,(const unsigned char *)s.c_str(),TEXT_MODE_NORMAL);
+      // interaction
+      int key; GetKey(&key);
+      // CERR << key << '\n';
+      if (key==KEY_CTRL_EXIT){
+        drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,COLOR_WHITE);	
+        return -1;
+      }
+      if (key==KEY_CTRL_EXE){
+        drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,COLOR_WHITE);
+        return cur;
+      }
+      if (key==KEY_CTRL_LEFT)
+        --col;
+      if (key==KEY_CTRL_RIGHT)
+        ++col;
+      if (key==KEY_CTRL_UP)
+        --row;
+      if (key==KEY_CTRL_DOWN)
+        ++row;
+    }
+  }
+
   const char *keytostring(int key, int keyflag, bool py, GIAC_CONTEXT)
   {
     const int textsize = 512;
@@ -6783,14 +6836,20 @@ int step_param(const gen &f, const gen &g, const gen &t, gen &tmin, gen &tmax, v
         strcpy(text, (var.type == _STRNG ? *var._STRNGptr : var.print()).c_str());
         return text;
       }
-      return "VARS()";
+      return "";
     }
     case KEY_CHAR_EXP:
       return "e";
     case KEY_CHAR_ANS:
       return "ans()";
-    case KEY_CTRL_INS:
-      return ":=";
+    case KEY_CTRL_INS: {
+      static string * sptr=0;
+      if (!sptr)
+        sptr=new string(" ");
+      int c=chartab();
+      (*sptr)[0]=c<32 || c==127?' ':char(c);
+      return sptr->c_str(); // ":=";
+    }
     case KEY_CHAR_COMMA:
       // if (keyflag==1) return "solve(";
       return ",";

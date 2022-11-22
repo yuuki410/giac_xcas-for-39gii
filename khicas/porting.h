@@ -33,7 +33,7 @@ typedef struct DISPBOX
 #define CAS_VIEW_BAR                           "  |edt+- |cmds  |A<>a  |eval>< "
 
 #define MINI_REV    1
-#define MINI_OVER   2
+#define MINI_OVER   0
 
 #define LCD_WIDTH_PX   256
 #define LCD_HEIGHT_PX  128
