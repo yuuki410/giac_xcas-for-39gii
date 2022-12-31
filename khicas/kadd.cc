@@ -505,10 +505,10 @@ int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
   // and add if (smallmenu.selection==app_number-1){ call your code }
   MenuItem smallmenuitems[smallmenu.numitems];      
   smallmenu.items=smallmenuitems;
-  smallmenu.height=11;
+  smallmenu.height=MENUHEIGHT-1;
   smallmenu.scrollbar=1;
   smallmenu.scrollout=1;
-  smallmenu.title = (char *) (mode==-1?"Pret bancaire":"Epargne");
+  smallmenu.title = (char *) lang==1?(mode==-1?"Pret bancaire":"Epargne"):(mode==-1?"Mortgage":"Savings");
   smallmenu.type = MENUTYPE_NO_NUMBER;
   while(1) {
     drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,_WHITE);
@@ -535,7 +535,11 @@ int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
     for (int i=0;i<6;i++)
       smallmenuitems[i].text = tab[i];
     smallmenuitems[6].text = (char*)((lang==1)?"Quitter ":"Quit ");
+#ifdef HP39
+    os_draw_string_medium(0,114,solved?_BLACK:_WHITE,solved?_WHITE:_BLACK,"Ans solve|EXE change|Tool help");
+#else
     os_draw_string(0,200,solved?giac::_GREEN:giac::_MAGENTA,_WHITE,"Ans solve|EXE change|Tool help");
+#endif
     int sres = doMenu(&smallmenu);
     if (sres==MENU_RETURN_EXIT)
       break;
