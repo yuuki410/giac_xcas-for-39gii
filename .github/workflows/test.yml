@@ -1,0 +1,28 @@
+name: Build
+
+on: 
+  push:
+    branches:
+      - main
+
+env:
+  ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install gcc-arm-none-eabi-10.3
+      run: |
+        wget -q "https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2"
+        sudo tar -xf gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2 -C /usr/
+        export PATH=/usr/gcc-arm-none-eabi-10.3-2021.10/bin:$PATH
+    - name: Build KhiCAS
+      run: |
+        export PATH=/usr/gcc-arm-none-eabi-10.3-2021.10/bin:$PATH
+        cd khicas/
+        make clean
+        make
+        cd ../
